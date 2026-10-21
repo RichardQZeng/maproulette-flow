@@ -86,7 +86,7 @@ MapRoulette Flow treats remote task state, local edits, and OSM uploads as one c
 - **Credential handling:** API keys are never placed in URLs, remain session-only by default, are scoped to the server and account, and are excluded from recovery snapshots and logs.
 - **Recovery:** cancellation, temporary failures, upload interruption, and restart preserve enough non-secret context for safe retry or release.
 
-The current automated suite contains 177 tests across 45 test classes. It covers workflow transitions, reservation and release, authentication, API contracts, parsing, geometry and download bounds, Swing-thread ownership, upload correlation, completion commit semantics, retries, cooperative changes, and restart recovery. CI runs the Maven verification and formatting checks and audits the packaged plugin identity and resources.
+The current automated suite contains 178 tests across 45 test classes. It covers workflow transitions, reservation and release, authentication, API contracts, parsing, geometry and download bounds, Swing-thread ownership, upload correlation, completion commit semantics, retries, cooperative changes, and restart recovery. CI runs the Maven verification and formatting checks and audits the packaged plugin identity and resources.
 
 ## Project Status
 

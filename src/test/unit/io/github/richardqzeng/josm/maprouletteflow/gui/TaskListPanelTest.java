@@ -3,6 +3,7 @@ package io.github.richardqzeng.josm.maprouletteflow.gui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.Component;
@@ -104,19 +105,7 @@ class TaskListPanelTest {
 
     @Test
     void authenticationLossDisablesServerActionsWithoutClearingTheActiveTask() {
-        final var baseUrl = io.github.richardqzeng.josm.maprouletteflow.config.MapRouletteConfig.getBaseUrl();
-        final var apiKey = "42|00000000-0000-0000-0000-000000000042";
-        final var account = new AuthenticatedUser(42, 24, "user", 0);
-        AuthenticationManager.setMode(baseUrl, AuthenticationMode.DIRECT);
-        AuthenticationManager.setDirectApiKey(baseUrl, apiKey, false);
-        AuthenticationManager.setAuthenticated(baseUrl, AuthenticationMode.DIRECT, apiKey, account);
-        workflow.authenticatedAs(baseUrl, account);
-        workflow.selectChallenge(new Challenge(10, "challenge", null, null, null, false, null, null, null, null,
-                null, null, null, null, null, null, null));
-        final var task = task(100);
-        workflow.reserveCandidate(task);
-        workflow.beginDownload(null);
-        workflow.activateTask(task, new OsmDataLayer(new DataSet(), "test", null));
+        final var task = enterAuthenticatedEditingTask();
         final var panel = new TaskListPanel();
         try {
             final var fixed = button(panel, "I fixed it!");
@@ -134,6 +123,33 @@ class TaskListPanelTest {
             assertEquals(task, panel.getSelected().iterator().next());
             assertTrue(descendants(panel).filter(JLabel.class::isInstance).map(JLabel.class::cast)
                     .map(JLabel::getText).anyMatch(text -> text != null && text.contains("Authenticate")));
+        } finally {
+            panel.destroy();
+        }
+    }
+
+    @Test
+    void retainedCompletionDraftCanReturnToEditing() {
+        final var task = enterAuthenticatedEditingTask();
+        workflow.draftCompletion(new CompletionDraft(task, CompletionResult.FIXED, "", "", null,
+                java.util.Map.of(), NextMode.RANDOM));
+
+        final var panel = new TaskListPanel();
+        try {
+            final var resumeEditing = button(panel, "Resume Editing");
+            assertTrue(resumeEditing.isEnabled());
+            assertTrue(isVisibleWithin(resumeEditing, panel));
+
+            GuiHelper.runInEDTAndWaitAndReturn(() -> {
+                resumeEditing.doClick();
+                return null;
+            });
+
+            assertEquals(WorkflowController.State.ACTIVE_EDITING, workflow.state());
+            assertNull(workflow.snapshot().completionDraft());
+            assertFalse(isVisibleWithin(resumeEditing, panel));
+            assertTrue(button(panel, "Re-download").isEnabled());
+            assertTrue(button(panel, "Not an Issue").isEnabled());
         } finally {
             panel.destroy();
         }
@@ -188,6 +204,9 @@ class TaskListPanelTest {
             assertEquals(nextTask, panel.getSelected().iterator().next());
             assertEquals(WorkflowController.State.RESERVED_PREVIEW, workflow.state());
             assertEquals(oldTask.id(), workflow.snapshot().completedTaskId());
+            final var inputs = descendants(panel).filter(JosmTextField.class::isInstance)
+                    .map(JosmTextField.class::cast).toList();
+            assertEquals("200", inputs.get(1).getText());
             assertTrue(descendants(panel).filter(JLabel.class::isInstance).map(JLabel.class::cast)
                     .map(JLabel::getText).anyMatch(text -> text != null && text.contains("No OSM data")));
             final var instructions = descendants(panel).filter(AbstractButton.class::isInstance)
@@ -227,6 +246,23 @@ class TaskListPanelTest {
                 java.util.Map.of(), NextMode.RANDOM));
         workflow.beginSubmission();
         workflow.statusCommitted(null);
+        return task;
+    }
+
+    private Task enterAuthenticatedEditingTask() {
+        final var baseUrl = io.github.richardqzeng.josm.maprouletteflow.config.MapRouletteConfig.getBaseUrl();
+        final var apiKey = "42|00000000-0000-0000-0000-000000000042";
+        final var account = new AuthenticatedUser(42, 24, "user", 0);
+        AuthenticationManager.setMode(baseUrl, AuthenticationMode.DIRECT);
+        AuthenticationManager.setDirectApiKey(baseUrl, apiKey, false);
+        AuthenticationManager.setAuthenticated(baseUrl, AuthenticationMode.DIRECT, apiKey, account);
+        workflow.authenticatedAs(baseUrl, account);
+        workflow.selectChallenge(new Challenge(10, "challenge", null, null, null, false, null, null, null, null,
+                null, null, null, null, null, null, null));
+        final var task = task(100);
+        workflow.reserveCandidate(task);
+        workflow.beginDownload(null);
+        workflow.activateTask(task, new OsmDataLayer(new DataSet(), "test", null));
         return task;
     }
 

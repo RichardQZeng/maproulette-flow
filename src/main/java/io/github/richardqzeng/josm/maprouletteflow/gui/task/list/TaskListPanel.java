@@ -90,6 +90,8 @@ public final class TaskListPanel extends ToggleDialog {
     private final RetryDownloadAction retryDownloadAction = new RetryDownloadAction();
     private final ReleaseAction releaseAction = new ReleaseAction();
     private final CurrentTaskPanel currentTaskPanel = new CurrentTaskPanel();
+    private final ResumeEditingAction resumeEditingAction = new ResumeEditingAction();
+    private final JButton resumeEditing = new JButton(resumeEditingAction);
     private final ShowInstructionsAction showInstructionsAction = new ShowInstructionsAction();
     private final JLabel currentTaskLabel = new JLabel(tr("Current task:"));
     private final JPanel currentTaskActions = new JPanel(new GridLayout(0, 2, 4, 4));
@@ -158,6 +160,8 @@ public final class TaskListPanel extends ToggleDialog {
         for (var action : currentTaskPanel.actions()) {
             currentTaskActions.add(new JButton(action));
         }
+        resumeEditing.setVisible(false);
+        currentTaskActions.add(resumeEditing);
         currentTaskActions.add(new JButton(showInstructionsAction));
         panel.add(currentTaskLabel, GBC.eol().anchor(GBC.LINE_START).insets(0, 8, 0, 0));
         panel.add(currentTaskActions, GBC.eol().fill(GBC.HORIZONTAL));
@@ -838,6 +842,9 @@ public final class TaskListPanel extends ToggleDialog {
         nearbyMode.setSelected(snapshot.nextMode() == NextMode.NEARBY);
         updateChallenge(snapshot.activeChallenge());
         final var task = snapshot.reservedTask() != null ? snapshot.reservedTask() : snapshot.activeTask();
+        if (task != null) {
+            taskInput.setText(Long.toString(task.id()));
+        }
         currentTaskPanel.refreshModel(snapshot.activeTask());
         currentTaskLabel.setVisible(snapshot.activeTask() != null);
         currentTaskActions.setVisible(snapshot.activeTask() != null);
@@ -885,7 +892,16 @@ public final class TaskListPanel extends ToggleDialog {
         retryDownloadAction.setEnabled(authenticated && !loading && (snapshot.state() == State.ACTIVE_EDITING
                 || workflow.canRetryInitialDownload() || workflow.canRetryActiveRedownload()));
         releaseAction.setEnabled(authenticated && !loading && workflow.canReleaseTask());
+        final var canResumeEditing = !snapshot.suspended() && !loading && snapshot.state() == State.COMPLETION_DRAFT
+                && snapshot.completionDraft() != null && !snapshot.completionStatusCommitted();
+        final var resumeVisibilityChanged = resumeEditing.isVisible() != canResumeEditing;
+        resumeEditingAction.setEnabled(canResumeEditing);
+        resumeEditing.setVisible(canResumeEditing);
         showInstructionsAction.updateEnabledState();
+        if (resumeVisibilityChanged) {
+            currentTaskActions.revalidate();
+            currentTaskActions.repaint();
+        }
     }
 
     private boolean isWorkflowAuthenticated() {
@@ -947,6 +963,28 @@ public final class TaskListPanel extends ToggleDialog {
             } else {
                 startTaskDownload();
             }
+        }
+    }
+
+    private final class ResumeEditingAction extends AbstractAction {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        ResumeEditingAction() {
+            super(tr("Resume Editing"));
+            putValue(SHORT_DESCRIPTION, tr("Discard the pending completion draft and return to task editing"));
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent event) {
+            final var snapshot = workflow.snapshot();
+            if (snapshot.suspended() || snapshot.state() != State.COMPLETION_DRAFT || snapshot.completionDraft() == null
+                    || snapshot.completionStatusCommitted()) {
+                return;
+            }
+            final var taskId = snapshot.completionDraft().task().id();
+            workflow.cancelCompletion();
+            message.setText(tr("Completion draft discarded. Continue editing task {0}.", taskId));
         }
     }
 
